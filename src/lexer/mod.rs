@@ -93,6 +93,13 @@ impl Token {
         }
     }
 
+    fn i32(val: i32, loc: TextLocation) -> Token {
+        Token {
+            text: TokenText::Integer(val),
+            loc: loc,
+        }
+    }
+
     fn identifier(text: String, loc: TextLocation) -> Token {
         Token {
             text: TokenText::Identifier(text),
@@ -198,263 +205,167 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
 mod test {
     use super::*;
 
+    fn assert_lexes_to(text: &str, expected_tokens: Vec<Result<Token, LexerError>>) {
+        let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
+        assert_eq!(expected_tokens, actual_tokens);
+    }
+
     #[test]
     fn test_empty_string_lexes_to_none() {
-        let text = "";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(None, lexer.next());
+        assert_lexes_to("", vec![]);
     }
 
     #[test]
     fn test_empty_tuple_lexes_to_left_paren_then_right_paren() {
-        let text = "()";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 2 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
+        assert_lexes_to(
+            "()",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::rparen(TextLocation { row: 1, col: 2 })),
+            ],
+        )
     }
 
     #[test]
     fn test_single_value_list_lexes_to_three_tokens() {
-        let text = "(a)";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
+        assert_lexes_to(
+            "(a)",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::identifier(
+                    "a".to_string(),
+                    TextLocation { row: 1, col: 2 },
+                )),
+                Ok(Token::rparen(TextLocation { row: 1, col: 3 })),
+            ],
         );
-        assert_eq!(
-            Some(Ok(Token::identifier(
-                "a".to_string(),
-                TextLocation { row: 1, col: 2 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 3 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_skips_over_spaces() {
-        let text = " ( a  ) ";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 2 }))),
-            lexer.next()
+        assert_lexes_to(
+            " ( a  ) ",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 2 })),
+                Ok(Token::identifier(
+                    "a".to_string(),
+                    TextLocation { row: 1, col: 4 },
+                )),
+                Ok(Token::rparen(TextLocation { row: 1, col: 7 })),
+            ],
         );
-        assert_eq!(
-            Some(Ok(Token::identifier(
-                "a".to_string(),
-                TextLocation { row: 1, col: 4 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 7 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_newline_advances_to_new_row() {
-        let text = "(a\n)";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
+        assert_lexes_to(
+            "(a\n)",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::identifier(
+                    "a".to_string(),
+                    TextLocation { row: 1, col: 2 },
+                )),
+                Ok(Token::rparen(TextLocation { row: 2, col: 1 })),
+            ],
         );
-        assert_eq!(
-            Some(Ok(Token::identifier(
-                "a".to_string(),
-                TextLocation { row: 1, col: 2 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 2, col: 1 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_integer_literal_followed_by_eof() {
-        let text = "123";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token {
+        assert_lexes_to(
+            "123",
+            vec![Ok(Token {
                 text: TokenText::Integer(123),
                 loc: TextLocation { row: 1, col: 1 },
-            })),
-            lexer.next()
+            })],
         );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_integer_literal_followed_by_space() {
-        let text = " 123 ";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token {
+        assert_lexes_to(
+            " 123 ",
+            vec![Ok(Token {
                 text: TokenText::Integer(123),
                 loc: TextLocation { row: 1, col: 2 },
-            })),
-            lexer.next()
+            })],
         );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_integer_literal_followed_by_paren() {
-        let text = "(123)";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
+        assert_lexes_to(
+            "(123)",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::i32(123, TextLocation { row: 1, col: 2 })),
+                Ok(Token::rparen(TextLocation { row: 1, col: 5 })),
+            ],
         );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(123),
-                loc: TextLocation { row: 1, col: 2 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 5 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_int_arithmetic() {
-        let text = "(+ 1 (- 2 3))";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
+        assert_lexes_to(
+            "(+ 1 (- 2 3))",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::identifier(
+                    "+".to_string(),
+                    TextLocation { row: 1, col: 2 },
+                )),
+                Ok(Token::i32(1, TextLocation { row: 1, col: 4 })),
+                Ok(Token::lparen(TextLocation { row: 1, col: 6 })),
+                Ok(Token::identifier(
+                    "-".to_string(),
+                    TextLocation { row: 1, col: 7 },
+                )),
+                Ok(Token::i32(2, TextLocation { row: 1, col: 9 })),
+                Ok(Token::i32(3, TextLocation { row: 1, col: 11 })),
+                Ok(Token::rparen(TextLocation { row: 1, col: 12 })),
+                Ok(Token::rparen(TextLocation { row: 1, col: 13 })),
+            ],
         );
-        assert_eq!(
-            Some(Ok(Token::identifier(
-                "+".to_string(),
-                TextLocation { row: 1, col: 2 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(1),
-                loc: TextLocation { row: 1, col: 4 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 6 }))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::identifier(
-                "-".to_string(),
-                TextLocation { row: 1, col: 7 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(2),
-                loc: TextLocation { row: 1, col: 9 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(3),
-                loc: TextLocation { row: 1, col: 11 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 12 }))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 13 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_negative_int() {
         let text = "(+ 1 -1)";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Ok(Token::lparen(TextLocation { row: 1, col: 1 }))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::identifier(
+        let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
+        let expected_tokens: Vec<_> = vec![
+            Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+            Ok(Token::identifier(
                 "+".to_string(),
-                TextLocation { row: 1, col: 2 }
-            ))),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(1),
-                loc: TextLocation { row: 1, col: 4 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token {
-                text: TokenText::Integer(-1),
-                loc: TextLocation { row: 1, col: 6 },
-            })),
-            lexer.next()
-        );
-        assert_eq!(
-            Some(Ok(Token::rparen(TextLocation { row: 1, col: 8 }))),
-            lexer.next()
-        );
-        assert_eq!(None, lexer.next());
+                TextLocation { row: 1, col: 2 },
+            )),
+            Ok(Token::i32(1, TextLocation { row: 1, col: 4 })),
+            Ok(Token::i32(-1, TextLocation { row: 1, col: 6 })),
+            Ok(Token::rparen(TextLocation { row: 1, col: 8 })),
+        ];
+
+        assert_eq!(expected_tokens, actual_tokens);
     }
 
     #[test]
     fn test_invalid_int() {
-        let text = "123abc";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Err(LexerError::invalid_integer(
+        assert_lexes_to(
+            "123abc",
+            vec![Err(LexerError::invalid_integer(
                 "123abc".to_string(),
-                TextLocation { row: 1, col: 1 }
-            ))),
-            lexer.next()
+                TextLocation { row: 1, col: 1 },
+            ))],
         );
-        assert_eq!(None, lexer.next());
     }
 
     #[test]
     fn test_invalid_int_excludes_trailing_spaces() {
-        let text = " 123abc ";
-        let mut lexer = Lexer::new(text.chars());
-        assert_eq!(
-            Some(Err(LexerError::invalid_integer(
+        assert_lexes_to(
+            " 123abc ",
+            vec![Err(LexerError::invalid_integer(
                 "123abc".to_string(),
-                TextLocation { row: 1, col: 2 }
-            ))),
-            lexer.next()
+                TextLocation { row: 1, col: 2 },
+            ))],
         );
-        assert_eq!(None, lexer.next());
     }
 }
