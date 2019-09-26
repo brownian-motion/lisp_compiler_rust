@@ -330,6 +330,30 @@ mod test {
     }
 
     #[test]
+    fn test_int_arithmetic_multiline() {
+        assert_lexes_to(
+            "(\n +\n 1\n (\n  -\n  2\n  3\n )\n)",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::identifier(
+                    "+".to_string(),
+                    TextLocation { row: 2, col: 2 },
+                )),
+                Ok(Token::i32(1, TextLocation { row: 3, col: 2 })),
+                Ok(Token::lparen(TextLocation { row: 4, col: 2 })),
+                Ok(Token::identifier(
+                    "-".to_string(),
+                    TextLocation { row: 5, col: 3 },
+                )),
+                Ok(Token::i32(2, TextLocation { row: 6, col: 3 })),
+                Ok(Token::i32(3, TextLocation { row: 7, col: 3 })),
+                Ok(Token::rparen(TextLocation { row: 8, col: 2 })),
+                Ok(Token::rparen(TextLocation { row: 9, col: 1 })),
+            ],
+        );
+    }
+
+    #[test]
     fn test_negative_int() {
         let text = "(+ 1 -1)";
         let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
