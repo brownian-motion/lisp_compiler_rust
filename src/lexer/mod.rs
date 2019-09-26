@@ -272,6 +272,21 @@ mod test {
     }
 
     #[test]
+    fn test_crlf_advances_to_new_row() {
+        assert_lexes_to(
+            "(a\r\n)",
+            vec![
+                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::identifier(
+                    "a".to_string(),
+                    TextLocation { row: 1, col: 2 },
+                )),
+                Ok(Token::rparen(TextLocation { row: 2, col: 1 })),
+            ],
+        );
+    }
+
+    #[test]
     fn test_integer_literal_followed_by_eof() {
         assert_lexes_to(
             "123",
