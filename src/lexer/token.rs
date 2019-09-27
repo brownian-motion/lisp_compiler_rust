@@ -44,3 +44,9 @@ impl fmt::Debug for Token {
         write!(f, "[{:?} at {:?}]", self.text, self.loc)
     }
 }
+
+impl Locateable<Range<CharLocation>> for Token {
+    fn location(&self) -> Range<CharLocation> {
+        self.loc.clone()
+    }
+}

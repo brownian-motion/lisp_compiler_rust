@@ -34,7 +34,7 @@ impl CharLocation {
 }
 
 pub trait Locateable<T> {
-    fn get_location(&self) -> T;
+    fn location(&self) -> T;
 }
 
 impl Into<Range<CharLocation>> for CharLocation {

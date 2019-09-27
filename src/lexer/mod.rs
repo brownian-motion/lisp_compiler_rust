@@ -1,4 +1,5 @@
-use crate::text::CharLocation;
+use crate::errors::CompilerError;
+use crate::text::*;
 use std::iter::Peekable;
 use std::ops::Range;
 
@@ -30,29 +31,49 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     }
 }
 
+// Because this is scoped by the module as lexer::ErrorType, this bare type name should be fine
 #[derive(Debug, Eq, PartialEq, Clone)]
-struct LexerError {
-    message: &'static str,
+enum ErrorType {
+    InvalidInteger,
+    InvalidIdent,
+}
+
+// Because this is scoped by the module as lexer::Error, this bare type name should be fine
+#[derive(Debug, Eq, PartialEq, Clone)]
+struct Error {
     loc: Range<CharLocation>,
-    state: LexerState,
+    error_type: ErrorType,
     text: String,
 }
 
-impl LexerError {
-    fn invalid_integer(text: String, loc: Range<CharLocation>) -> LexerError {
-        LexerError {
-            message: "Could not parse malformed integer token",
+impl Locateable<Range<CharLocation>> for Error {
+    fn location(&self) -> Range<CharLocation> {
+        self.loc.clone()
+    }
+}
+
+impl CompilerError for Error {
+    fn message(&self) -> &'static str {
+        match self.error_type {
+            ErrorType::InvalidInteger => "Could not parse malformed integer token",
+            ErrorType::InvalidIdent => "Unrecognized or invalid identifier",
+        }
+    }
+}
+
+impl Error {
+    fn invalid_integer(text: String, loc: Range<CharLocation>) -> Error {
+        Error {
             loc: loc,
-            state: LexerState::InvalidInteger,
+            error_type: ErrorType::InvalidInteger,
             text: text,
         }
     }
 
-    fn invalid_ident(text: String, loc: Range<CharLocation>) -> LexerError {
-        LexerError {
-            message: "Unrecognized or invalid token",
+    fn invalid_ident(text: String, loc: Range<CharLocation>) -> Error {
+        Error {
             loc: loc,
-            state: LexerState::InvalidIdent,
+            error_type: ErrorType::InvalidIdent,
             text: text,
         }
     }
@@ -80,16 +101,15 @@ fn is_identifier_char(c: char) -> bool {
 }
 
 impl Token {
-    fn integer(text: String, loc: Range<CharLocation>) -> Result<Token, LexerError> {
+    fn integer(text: String, loc: Range<CharLocation>) -> Result<Token, Error> {
         match text.parse::<i32>() {
             Ok(val) => Ok(Token {
                 text: TokenText::Integer(val),
                 loc: loc,
             }),
-            Err(_) => Err(LexerError {
-                message: "Could not parse malformed integer token",
+            Err(_) => Err(Error {
                 loc: loc,
-                state: LexerState::InvalidInteger,
+                error_type: ErrorType::InvalidInteger,
                 text: text,
             }),
         }
@@ -125,7 +145,7 @@ impl Token {
 }
 
 impl<I: Iterator<Item = char>> Lexer<I> {
-    fn integer_token(&self, text: String, start_loc: CharLocation) -> Result<Token, LexerError> {
+    fn integer_token(&self, text: String, start_loc: CharLocation) -> Result<Token, Error> {
         Token::integer(text, start_loc..self.loc)
     }
 
@@ -133,19 +153,19 @@ impl<I: Iterator<Item = char>> Lexer<I> {
         Token::identifier(text, start_loc..self.loc)
     }
 
-    fn invalid_integer(&self, text: String, start_loc: CharLocation) -> LexerError {
-        LexerError::invalid_integer(text, start_loc..self.loc)
+    fn invalid_integer(&self, text: String, start_loc: CharLocation) -> Error {
+        Error::invalid_integer(text, start_loc..self.loc)
     }
 
-    fn invalid_ident(&self, text: String, loc: CharLocation) -> LexerError {
-        LexerError::invalid_ident(text, loc..self.loc)
+    fn invalid_ident(&self, text: String, loc: CharLocation) -> Error {
+        Error::invalid_ident(text, loc..self.loc)
     }
 }
 
 impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
-    type Item = Result<Token, LexerError>;
+    type Item = Result<Token, Error>;
 
-    fn next(&mut self) -> Option<Result<Token, LexerError>> {
+    fn next(&mut self) -> Option<Result<Token, Error>> {
         while self.chars.peek().filter(|&&c| c.is_whitespace()).is_some() {
             self.advance_char();
         }
@@ -227,7 +247,7 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
 mod test {
     use super::*;
 
-    fn assert_lexes_to(text: &str, expected_tokens: Vec<Result<Token, LexerError>>) {
+    fn assert_lexes_to(text: &str, expected_tokens: Vec<Result<Token, Error>>) {
         let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
         assert_eq!(expected_tokens, actual_tokens);
     }
@@ -412,7 +432,7 @@ mod test {
     fn test_invalid_int() {
         assert_lexes_to(
             "123abc",
-            vec![Err(LexerError::invalid_integer(
+            vec![Err(Error::invalid_integer(
                 "123abc".to_string(),
                 (1, 1).into()..(1, 7).into(),
             ))],
@@ -423,7 +443,7 @@ mod test {
     fn test_invalid_int_excludes_trailing_spaces() {
         assert_lexes_to(
             " 123abc ",
-            vec![Err(LexerError::invalid_integer(
+            vec![Err(Error::invalid_integer(
                 "123abc".to_string(),
                 (1, 2).into()..(1, 8).into(),
             ))],
