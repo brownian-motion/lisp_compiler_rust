@@ -1,4 +1,6 @@
+use crate::text::CharLocation;
 use std::iter::Peekable;
+use std::ops::Range;
 
 mod token;
 use token::*;
@@ -15,14 +17,14 @@ enum LexerState {
 }
 
 struct Lexer<I: Iterator<Item = char>> {
-    loc: TextLocation,
+    loc: CharLocation,
     chars: Peekable<I>,
 }
 
 impl<I: Iterator<Item = char>> Lexer<I> {
     pub fn new(iter: I) -> Self {
         Lexer {
-            loc: TextLocation { row: 1, col: 1 },
+            loc: CharLocation::new(1, 1),
             chars: iter.peekable(),
         }
     }
@@ -31,13 +33,13 @@ impl<I: Iterator<Item = char>> Lexer<I> {
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct LexerError {
     message: &'static str,
-    loc: TextLocation,
+    loc: Range<CharLocation>,
     state: LexerState,
     text: String,
 }
 
 impl LexerError {
-    fn invalid_integer(text: String, loc: TextLocation) -> LexerError {
+    fn invalid_integer(text: String, loc: Range<CharLocation>) -> LexerError {
         LexerError {
             message: "Could not parse malformed integer token",
             loc: loc,
@@ -46,7 +48,7 @@ impl LexerError {
         }
     }
 
-    fn invalid_ident(text: String, loc: TextLocation) -> LexerError {
+    fn invalid_ident(text: String, loc: Range<CharLocation>) -> LexerError {
         LexerError {
             message: "Unrecognized or invalid token",
             loc: loc,
@@ -61,7 +63,7 @@ impl<I: Iterator<Item = char>> Lexer<I> {
         match self.chars.next() {
             Some(c) => {
                 if c == '\n' {
-                    self.loc.row += 1;
+                    self.loc.line += 1;
                     self.loc.col = 1;
                 } else {
                     self.loc.col += 1;
@@ -78,7 +80,7 @@ fn is_identifier_char(c: char) -> bool {
 }
 
 impl Token {
-    fn integer(text: String, loc: TextLocation) -> Result<Token, LexerError> {
+    fn integer(text: String, loc: Range<CharLocation>) -> Result<Token, LexerError> {
         match text.parse::<i32>() {
             Ok(val) => Ok(Token {
                 text: TokenText::Integer(val),
@@ -93,32 +95,50 @@ impl Token {
         }
     }
 
-    fn i32(val: i32, loc: TextLocation) -> Token {
+    fn i32(val: i32, loc: Range<CharLocation>) -> Token {
         Token {
             text: TokenText::Integer(val),
             loc: loc,
         }
     }
 
-    fn identifier(text: String, loc: TextLocation) -> Token {
+    fn identifier(text: String, loc: Range<CharLocation>) -> Token {
         Token {
             text: TokenText::Identifier(text),
             loc: loc,
         }
     }
 
-    fn rparen(loc: TextLocation) -> Token {
+    fn rparen(loc: CharLocation) -> Token {
         Token {
             text: TokenText::RightParen,
-            loc: loc,
+            loc: loc.into(),
         }
     }
 
-    fn lparen(loc: TextLocation) -> Token {
+    fn lparen(loc: CharLocation) -> Token {
         Token {
             text: TokenText::LeftParen,
-            loc: loc,
+            loc: loc.into(),
         }
+    }
+}
+
+impl<I: Iterator<Item = char>> Lexer<I> {
+    fn integer_token(&self, text: String, start_loc: CharLocation) -> Result<Token, LexerError> {
+        Token::integer(text, start_loc..self.loc)
+    }
+
+    fn identifier_token(&self, text: String, start_loc: CharLocation) -> Token {
+        Token::identifier(text, start_loc..self.loc)
+    }
+
+    fn invalid_integer(&self, text: String, start_loc: CharLocation) -> LexerError {
+        LexerError::invalid_integer(text, start_loc..self.loc)
+    }
+
+    fn invalid_ident(&self, text: String, loc: CharLocation) -> LexerError {
+        LexerError::invalid_ident(text, loc..self.loc)
     }
 }
 
@@ -147,15 +167,17 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                     match state {
                         LexerState::MidIdentifier => {
                             if None == self.chars.peek().filter(|&&c| is_identifier_char(c)) {
-                                return Some(Ok(Token::identifier(token_text, initial_loc)));
+                                return Some(Ok(self.identifier_token(token_text, initial_loc)));
                             }
                             token_text.push(self.advance_char().unwrap())
                         }
                         LexerState::LeadingMinus => match self.chars.peek() {
-                            None => return Some(Ok(Token::identifier(token_text, initial_loc))),
+                            None => {
+                                return Some(Ok(self.identifier_token(token_text, initial_loc)))
+                            }
                             Some(c) if c.is_whitespace() || *c == '(' || *c == ')' => {
                                 // this refers to the special builtin -
-                                return Some(Ok(Token::identifier(token_text, initial_loc)));
+                                return Some(Ok(self.identifier_token(token_text, initial_loc)));
                             }
                             Some(c) => {
                                 state = if c.is_digit(10) {
@@ -172,9 +194,9 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                             Some(c) if c.is_digit(10) => {
                                 token_text.push(self.advance_char().unwrap())
                             }
-                            None => return Some(Token::integer(token_text, initial_loc)),
+                            None => return Some(self.integer_token(token_text, initial_loc)),
                             Some(c) if c.is_whitespace() || *c == '(' || *c == ')' => {
-                                return Some(Token::integer(token_text, initial_loc))
+                                return Some(self.integer_token(token_text, initial_loc))
                             }
                             Some(_) => {
                                 token_text.push(self.advance_char().unwrap());
@@ -188,9 +210,9 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                                 }
                                 _ => {
                                     return Some(Err(if state == LexerState::InvalidIdent {
-                                        LexerError::invalid_ident(token_text, initial_loc)
+                                        self.invalid_ident(token_text, initial_loc)
                                     } else {
-                                        LexerError::invalid_integer(token_text, initial_loc)
+                                        self.invalid_integer(token_text, initial_loc)
                                     }))
                                 }
                             }
@@ -220,8 +242,8 @@ mod test {
         assert_lexes_to(
             "()",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
-                Ok(Token::rparen(TextLocation { row: 1, col: 2 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
+                Ok(Token::rparen(CharLocation::new(1, 2))),
             ],
         )
     }
@@ -231,12 +253,12 @@ mod test {
         assert_lexes_to(
             "(a)",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
                 Ok(Token::identifier(
                     "a".to_string(),
-                    TextLocation { row: 1, col: 2 },
+                    CharLocation::new(1, 2).into(),
                 )),
-                Ok(Token::rparen(TextLocation { row: 1, col: 3 })),
+                Ok(Token::rparen(CharLocation::new(1, 3))),
             ],
         );
     }
@@ -246,12 +268,12 @@ mod test {
         assert_lexes_to(
             " ( a  ) ",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 2 })),
+                Ok(Token::lparen(CharLocation::new(1, 2))),
                 Ok(Token::identifier(
                     "a".to_string(),
-                    TextLocation { row: 1, col: 4 },
+                    CharLocation::new(1, 4).into(),
                 )),
-                Ok(Token::rparen(TextLocation { row: 1, col: 7 })),
+                Ok(Token::rparen(CharLocation::new(1, 7))),
             ],
         );
     }
@@ -261,12 +283,12 @@ mod test {
         assert_lexes_to(
             "(a\n)",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
                 Ok(Token::identifier(
                     "a".to_string(),
-                    TextLocation { row: 1, col: 2 },
+                    CharLocation::new(1, 2).into(),
                 )),
-                Ok(Token::rparen(TextLocation { row: 2, col: 1 })),
+                Ok(Token::rparen(CharLocation::new(2, 1))),
             ],
         );
     }
@@ -276,12 +298,12 @@ mod test {
         assert_lexes_to(
             "(a\r\n)",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
                 Ok(Token::identifier(
                     "a".to_string(),
-                    TextLocation { row: 1, col: 2 },
+                    CharLocation::new(1, 2).into(),
                 )),
-                Ok(Token::rparen(TextLocation { row: 2, col: 1 })),
+                Ok(Token::rparen(CharLocation::new(2, 1))),
             ],
         );
     }
@@ -292,7 +314,7 @@ mod test {
             "123",
             vec![Ok(Token {
                 text: TokenText::Integer(123),
-                loc: TextLocation { row: 1, col: 1 },
+                loc: (1, 1).into()..(1, 4).into(),
             })],
         );
     }
@@ -303,7 +325,7 @@ mod test {
             " 123 ",
             vec![Ok(Token {
                 text: TokenText::Integer(123),
-                loc: TextLocation { row: 1, col: 2 },
+                loc: (1, 2).into()..(1, 5).into(),
             })],
         );
     }
@@ -313,9 +335,9 @@ mod test {
         assert_lexes_to(
             "(123)",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
-                Ok(Token::i32(123, TextLocation { row: 1, col: 2 })),
-                Ok(Token::rparen(TextLocation { row: 1, col: 5 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
+                Ok(Token::i32(123, (1, 2).into()..(1, 5).into())),
+                Ok(Token::rparen(CharLocation::new(1, 5))),
             ],
         );
     }
@@ -325,21 +347,21 @@ mod test {
         assert_lexes_to(
             "(+ 1 (- 2 3))",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
                 Ok(Token::identifier(
                     "+".to_string(),
-                    TextLocation { row: 1, col: 2 },
+                    CharLocation::new(1, 2).into(),
                 )),
-                Ok(Token::i32(1, TextLocation { row: 1, col: 4 })),
-                Ok(Token::lparen(TextLocation { row: 1, col: 6 })),
+                Ok(Token::i32(1, CharLocation::new(1, 4).into())),
+                Ok(Token::lparen(CharLocation::new(1, 6))),
                 Ok(Token::identifier(
                     "-".to_string(),
-                    TextLocation { row: 1, col: 7 },
+                    CharLocation::new(1, 7).into(),
                 )),
-                Ok(Token::i32(2, TextLocation { row: 1, col: 9 })),
-                Ok(Token::i32(3, TextLocation { row: 1, col: 11 })),
-                Ok(Token::rparen(TextLocation { row: 1, col: 12 })),
-                Ok(Token::rparen(TextLocation { row: 1, col: 13 })),
+                Ok(Token::i32(2, CharLocation::new(1, 9).into())),
+                Ok(Token::i32(3, CharLocation::new(1, 11).into())),
+                Ok(Token::rparen(CharLocation::new(1, 12))),
+                Ok(Token::rparen(CharLocation::new(1, 13))),
             ],
         );
     }
@@ -349,21 +371,21 @@ mod test {
         assert_lexes_to(
             "(\n +\n 1\n (\n  -\n  2\n  3\n )\n)",
             vec![
-                Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+                Ok(Token::lparen(CharLocation::new(1, 1))),
                 Ok(Token::identifier(
                     "+".to_string(),
-                    TextLocation { row: 2, col: 2 },
+                    CharLocation::new(2, 2).into(),
                 )),
-                Ok(Token::i32(1, TextLocation { row: 3, col: 2 })),
-                Ok(Token::lparen(TextLocation { row: 4, col: 2 })),
+                Ok(Token::i32(1, CharLocation::new(3, 2).into())),
+                Ok(Token::lparen(CharLocation::new(4, 2))),
                 Ok(Token::identifier(
                     "-".to_string(),
-                    TextLocation { row: 5, col: 3 },
+                    CharLocation::new(5, 3).into(),
                 )),
-                Ok(Token::i32(2, TextLocation { row: 6, col: 3 })),
-                Ok(Token::i32(3, TextLocation { row: 7, col: 3 })),
-                Ok(Token::rparen(TextLocation { row: 8, col: 2 })),
-                Ok(Token::rparen(TextLocation { row: 9, col: 1 })),
+                Ok(Token::i32(2, CharLocation::new(6, 3).into())),
+                Ok(Token::i32(3, CharLocation::new(7, 3).into())),
+                Ok(Token::rparen(CharLocation::new(8, 2))),
+                Ok(Token::rparen(CharLocation::new(9, 1))),
             ],
         );
     }
@@ -373,14 +395,14 @@ mod test {
         let text = "(+ 1 -1)";
         let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
         let expected_tokens: Vec<_> = vec![
-            Ok(Token::lparen(TextLocation { row: 1, col: 1 })),
+            Ok(Token::lparen(CharLocation::new(1, 1))),
             Ok(Token::identifier(
                 "+".to_string(),
-                TextLocation { row: 1, col: 2 },
+                CharLocation::new(1, 2).into(),
             )),
-            Ok(Token::i32(1, TextLocation { row: 1, col: 4 })),
-            Ok(Token::i32(-1, TextLocation { row: 1, col: 6 })),
-            Ok(Token::rparen(TextLocation { row: 1, col: 8 })),
+            Ok(Token::i32(1, CharLocation::new(1, 4).into())),
+            Ok(Token::i32(-1, (1, 6).into()..(1, 8).into())),
+            Ok(Token::rparen(CharLocation::new(1, 8))),
         ];
 
         assert_eq!(expected_tokens, actual_tokens);
@@ -392,7 +414,7 @@ mod test {
             "123abc",
             vec![Err(LexerError::invalid_integer(
                 "123abc".to_string(),
-                TextLocation { row: 1, col: 1 },
+                (1, 1).into()..(1, 7).into(),
             ))],
         );
     }
@@ -403,7 +425,7 @@ mod test {
             " 123abc ",
             vec![Err(LexerError::invalid_integer(
                 "123abc".to_string(),
-                TextLocation { row: 1, col: 2 },
+                (1, 2).into()..(1, 8).into(),
             ))],
         );
     }
