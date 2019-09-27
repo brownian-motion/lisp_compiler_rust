@@ -3,7 +3,7 @@ use crate::text::*;
 use std::iter::Peekable;
 use std::ops::Range;
 
-mod token;
+pub mod token;
 use token::*;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -17,7 +17,7 @@ enum LexerState {
     InvalidInteger,
 }
 
-struct Lexer<I: Iterator<Item = char>> {
+pub struct Lexer<I: Iterator<Item = char>> {
     loc: CharLocation,
     chars: Peekable<I>,
 }
@@ -31,6 +31,19 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     }
 }
 
+pub trait Lexable<I: Iterator<Item = char>> {
+    fn lex(self) -> Lexer<I>;
+}
+
+impl<T> Lexable<T> for T
+where
+    T: Iterator<Item = char>,
+{
+    fn lex(self) -> Lexer<T> {
+        Lexer::new(self)
+    }
+}
+
 // Because this is scoped by the module as lexer::ErrorType, this bare type name should be fine
 #[derive(Debug, Eq, PartialEq, Clone)]
 enum ErrorType {
@@ -40,7 +53,7 @@ enum ErrorType {
 
 // Because this is scoped by the module as lexer::Error, this bare type name should be fine
 #[derive(Debug, Eq, PartialEq, Clone)]
-struct Error {
+pub struct Error {
     loc: Range<CharLocation>,
     error_type: ErrorType,
     text: String,
@@ -248,7 +261,7 @@ mod test {
     use super::*;
 
     fn assert_lexes_to(text: &str, expected_tokens: Vec<Result<Token, Error>>) {
-        let actual_tokens: Vec<_> = Lexer::new(text.chars()).collect();
+        let actual_tokens: Vec<_> = text.chars().lex().collect();
         assert_eq!(expected_tokens, actual_tokens);
     }
 
