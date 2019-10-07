@@ -1,4 +1,4 @@
-use crate::errors::CompilerError;
+use crate::errors::*;
 use crate::text::*;
 use std::iter::Peekable;
 use std::ops::Range;
@@ -17,6 +17,7 @@ enum LexerState {
     InvalidInteger,
 }
 
+#[derive(Debug)]
 pub struct Lexer<I: Iterator<Item = char>> {
     loc: CharLocation,
     chars: Peekable<I>,
@@ -46,17 +47,26 @@ where
 
 // Because this is scoped by the module as lexer::ErrorType, this bare type name should be fine
 #[derive(Debug, Eq, PartialEq, Clone)]
-enum ErrorType {
+pub enum ErrorType {
     InvalidInteger,
     InvalidIdent,
+}
+
+impl CompilerErrorMessage for ErrorType {
+    fn message(&self) -> &'static str {
+        match self {
+            ErrorType::InvalidInteger => "Could not parse malformed integer token",
+            ErrorType::InvalidIdent => "Unrecognized or invalid identifier",
+        }
+    }
 }
 
 // Because this is scoped by the module as lexer::Error, this bare type name should be fine
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Error {
-    loc: Range<CharLocation>,
-    error_type: ErrorType,
-    text: String,
+    pub loc: Range<CharLocation>,
+    pub error_type: ErrorType,
+    pub text: String,
 }
 
 impl Locateable<Range<CharLocation>> for Error {
@@ -65,12 +75,9 @@ impl Locateable<Range<CharLocation>> for Error {
     }
 }
 
-impl CompilerError for Error {
+impl CompilerErrorMessage for Error {
     fn message(&self) -> &'static str {
-        match self.error_type {
-            ErrorType::InvalidInteger => "Could not parse malformed integer token",
-            ErrorType::InvalidIdent => "Unrecognized or invalid identifier",
-        }
+        self.error_type.message()
     }
 }
 
@@ -79,7 +86,7 @@ impl Error {
         Error {
             loc: loc,
             error_type: ErrorType::InvalidInteger,
-            text: text,
+            text,
         }
     }
 
@@ -87,7 +94,7 @@ impl Error {
         Error {
             loc: loc,
             error_type: ErrorType::InvalidIdent,
-            text: text,
+            text,
         }
     }
 }
