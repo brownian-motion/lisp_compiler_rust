@@ -51,3 +51,7 @@ impl From<(u32, u32)> for CharLocation {
         CharLocation::new(loc.0, loc.1)
     }
 }
+
+pub trait Locater<T, L> {
+    fn locate(&self, obj: T) -> L;
+}
