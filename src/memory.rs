@@ -1,12 +1,29 @@
+use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
 pub struct MemoryArena<T>(Vec<T>);
 
-#[derive(Copy, Debug)]
+#[derive(Copy)]
 pub struct ArenaIdx<T> {
     index: usize,
     node_type: PhantomData<T>, // just denotes that this is used to index a memory arena of the given type and lifetime
+}
+
+impl<T> PartialEq for ArenaIdx<T> {
+    fn eq(&self, other: &ArenaIdx<T>) -> bool {
+        self.index == other.index
+    }
+}
+
+impl<T> Eq for ArenaIdx<T> {}
+
+// implemented so that lookup maps can be constructed from one index to another
+impl<T> Hash for ArenaIdx<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.index.hash(state);
+    }
 }
 
 impl<T> Clone for ArenaIdx<T> {
@@ -15,6 +32,12 @@ impl<T> Clone for ArenaIdx<T> {
             index: self.index,
             node_type: PhantomData,
         }
+    }
+}
+
+impl<T> fmt::Debug for ArenaIdx<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[Idx {}]", self.index)
     }
 }
 

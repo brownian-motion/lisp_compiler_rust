@@ -20,6 +20,7 @@ pub struct ParseTree {
     pub program: Vec<ArenaIdx<SExpr>>,
 }
 
+#[derive(Debug)]
 pub enum ParseTreeTraversalIndex {
     Expr(ArenaIdx<Expr>),
     Es(ArenaIdx<Es>),
@@ -274,6 +275,29 @@ fn test_pretty_print_parsed_simple_sexpr() {
                     |   |   Expr: [Integer(1) at (l1, c4)..(l1, c5)]\n\
                     |   |   Es\n\
                     |   |   |   Expr: [Integer(2) at (l1, c6)..(l1, c7)]\n\
+                    |   |   |   <empty>\n";
+    let actual = format!("{:?}", parse_tree);
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_pretty_print_parsed_simple_sexpr_pair() {
+    // (+ (- 1 2) a)
+    let parse_tree = "(+ 1 2)\n(- 3 4)".chars().lex().parse().unwrap();
+
+    let expected = "SExpr\n\
+                    |   Expr: [Identifier(\"+\") at (l1, c2)..(l1, c3)]\n\
+                    |   Es\n\
+                    |   |   Expr: [Integer(1) at (l1, c4)..(l1, c5)]\n\
+                    |   |   Es\n\
+                    |   |   |   Expr: [Integer(2) at (l1, c6)..(l1, c7)]\n\
+                    |   |   |   <empty>\n\
+                    SExpr\n\
+                    |   Expr: [Identifier(\"-\") at (l2, c2)..(l2, c3)]\n\
+                    |   Es\n\
+                    |   |   Expr: [Integer(3) at (l2, c4)..(l2, c5)]\n\
+                    |   |   Es\n\
+                    |   |   |   Expr: [Integer(4) at (l2, c6)..(l2, c7)]\n\
                     |   |   |   <empty>\n";
     let actual = format!("{:?}", parse_tree);
     assert_eq!(expected, actual);

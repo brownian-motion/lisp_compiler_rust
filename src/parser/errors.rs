@@ -1,9 +1,10 @@
 use crate::errors::*;
 use crate::lexer;
 use crate::text::*;
+use std::fmt;
 use std::ops::Range;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ErrorType {
     UnexpectedEof,
     UnmatchedRightParen,
@@ -11,7 +12,7 @@ pub enum ErrorType {
     UnexpectedStackState,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Error {
     pub loc: Range<CharLocation>,
     pub error_type: ErrorType,
@@ -48,22 +49,45 @@ impl From<lexer::Error> for Error {
 }
 
 impl CompilerErrorMessage for ErrorType {
-    fn message(&self) -> &'static str {
+    fn message(&self) -> String {
         use ErrorType::*;
         match self {
-            UnexpectedEof => "Unexpected end of input (unmatched left parenthesis)",
-            UnmatchedRightParen => "Unmatched right parenthesis",
-            EmptySExpr => {
-                "Empty S-sxpression (must have values between left and right parenthesis)"
-            }
-            UnexpectedStackState => "Unexpected Stack state!!",
+            UnexpectedEof => "Unexpected end of input (unmatched left parenthesis)".to_string(),
+            UnmatchedRightParen => "Unmatched right parenthesis".to_string(),
+            UnexpectedStackState => "Unexpected Stack state!!".to_string(), // TODO: add info ABOUT that stack state to the error message
             LexerError(lexer_error) => lexer_error.message(),
         }
     }
 }
 
+impl ErrorCode for ErrorType {
+    fn error_code(&self) -> (&'static str, u32) {
+        use ErrorType::*;
+        match self {
+            UnexpectedEof => ("P", 1),
+            UnmatchedRightParen => ("P", 2),
+            UnexpectedStackState => ("P", 3),
+            LexerError(lexer_error) => lexer_error.error_code(),
+        }
+    }
+}
+
 impl CompilerErrorMessage for Error {
-    fn message(&self) -> &'static str {
+    fn message(&self) -> String {
         self.error_type.message()
+    }
+}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> (&'static str, u32) {
+        self.error_type.error_code()
+    }
+}
+
+impl CompilerError for Error {}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", format_error(self))
     }
 }

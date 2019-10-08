@@ -10,10 +10,10 @@ use std::iter::Peekable;
 
 use std::ops::*;
 
-mod elems;
-mod errors;
-mod traits;
-mod tree;
+pub mod elems;
+pub mod errors;
+pub mod traits;
+pub mod tree;
 use crate::parser::elems::*;
 use errors::*;
 use traits::*;
@@ -217,7 +217,7 @@ where
     fn finish(mut self) -> Result<ParseTree, Vec<Error>> {
         use ErrorType::UnexpectedStackState;
         let mut errors = Vec::new();
-        for item in self.stack {
+        for item in self.stack.into_iter().rev() {
             match item {
                 ParserStackItem::SExpr(idx) => {
                     self.tree.program.push(idx);

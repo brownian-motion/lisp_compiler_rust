@@ -1,3 +1,4 @@
+mod ast;
 pub mod errors;
 mod lexer;
 pub mod memory;
