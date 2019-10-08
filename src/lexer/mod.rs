@@ -1,10 +1,13 @@
-use crate::errors::*;
 use crate::text::*;
 use std::iter::Peekable;
 use std::ops::Range;
 
+pub mod errors;
 pub mod token;
-use token::*;
+pub mod traits;
+pub use errors::*;
+pub use token::*;
+pub use traits::*;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum LexerState {
@@ -32,70 +35,12 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     }
 }
 
-pub trait Lexable<I: Iterator<Item = char>> {
-    fn lex(self) -> Lexer<I>;
-}
-
 impl<T> Lexable<T> for T
 where
     T: Iterator<Item = char>,
 {
     fn lex(self) -> Lexer<T> {
         Lexer::new(self)
-    }
-}
-
-// Because this is scoped by the module as lexer::ErrorType, this bare type name should be fine
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum ErrorType {
-    InvalidInteger,
-    InvalidIdent,
-}
-
-impl CompilerErrorMessage for ErrorType {
-    fn message(&self) -> &'static str {
-        match self {
-            ErrorType::InvalidInteger => "Could not parse malformed integer token",
-            ErrorType::InvalidIdent => "Unrecognized or invalid identifier",
-        }
-    }
-}
-
-// Because this is scoped by the module as lexer::Error, this bare type name should be fine
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Error {
-    pub loc: Range<CharLocation>,
-    pub error_type: ErrorType,
-    pub text: String,
-}
-
-impl Locateable<Range<CharLocation>> for Error {
-    fn location(&self) -> Range<CharLocation> {
-        self.loc.clone()
-    }
-}
-
-impl CompilerErrorMessage for Error {
-    fn message(&self) -> &'static str {
-        self.error_type.message()
-    }
-}
-
-impl Error {
-    fn invalid_integer(text: String, loc: Range<CharLocation>) -> Error {
-        Error {
-            loc: loc,
-            error_type: ErrorType::InvalidInteger,
-            text,
-        }
-    }
-
-    fn invalid_ident(text: String, loc: Range<CharLocation>) -> Error {
-        Error {
-            loc: loc,
-            error_type: ErrorType::InvalidIdent,
-            text,
-        }
     }
 }
 
