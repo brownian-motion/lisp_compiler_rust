@@ -44,17 +44,6 @@ impl From<ParseTree> for AST {
         let mut cars_by_expr_idx: HashMap<ArenaIdx<Expr>, Value> = HashMap::new();
         let mut cdrs_by_es_idx: HashMap<ArenaIdx<Es>, ArenaIdx<ConsCell>> = HashMap::new();
 
-        println!(
-            "Iteration order {:?} for {:?}",
-            parse_tree
-                .preorder_traversal()
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>(),
-            parse_tree
-        );
-
         let traversal = parse_tree
             .preorder_traversal()
             .collect::<Vec<_>>()
@@ -62,16 +51,13 @@ impl From<ParseTree> for AST {
             .rev();
 
         for item in traversal {
-            print!("\nProcessing item: {:?}", item);
             match item.1 {
                 Index::Es(es_idx) => match &parse_tree.es[&es_idx] {
                     Es::Empty(_) => {
-                        print!("\tEs::Empty");
                         // no point in storing a whole bunch of pointers to nil in the cdr hash map!
                         // we can just leave these indexes uninserted, which will yield None anyways when fetched from the cdr lookup map
                     }
                     Es::Cons(car_idx, cdr_idx) => {
-                        print!("\tEs::Cons(E {:?}, Es {:?})", car_idx, cdr_idx);
                         // we will use the lookup maps above to determine the cdr for this cell,
                         // and assume that we have already traversed the es above by iterating backwards
 
@@ -88,16 +74,11 @@ impl From<ParseTree> for AST {
                             loc,
                         });
                         let cell = &cells[&cons_idx];
-                        print!(
-                            "\tCreated Es({:?}) => Cons{:?}({:?}, {:?})",
-                            es_idx, cons_idx, cell.car, cell.cdr
-                        );
                         cdrs_by_es_idx.insert(es_idx.clone(), cons_idx);
                     }
                 },
                 Index::SExpr(sexpr_idx) => {
                     let sexpr = &parse_tree.sexprs[&sexpr_idx];
-                    print!("\tSExpr(E {:?}, Es {:?})", sexpr.e, sexpr.es);
                     let value = match cars_by_expr_idx.remove(&sexpr.e){
                     	Some(val) => val,
                     	None => panic!("{}\n\tError at {:?}, unknown CAR at {:?}\n\tcars_by_expr_idx: {:?}\n\tcdrs_by_es_idx: {:?}",
@@ -112,41 +93,28 @@ impl From<ParseTree> for AST {
                         loc,
                     });
                     let cell = &cells[&cons_idx];
-                    print!(
-                        "\tCreated SExpr({:?}) => Cons{:?}({:?}, {:?})",
-                        sexpr_idx, &cons_idx, cell.car, cell.cdr
-                    );
                     cons_idx_by_sexpr_idx.insert(sexpr_idx, cons_idx);
                 }
                 Index::Expr(expr_idx) => {
                     let value = match &parse_tree.exprs[&expr_idx] {
                         Expr::Terminal(token) => {
-                            print!("\tExpr::Terminal({:?})", token);
                             match &token.text {
         						TokenText::Identifier(text) => {
 							        // TODO: de-duplicate the identifier names using a HashMap's .or_insert_with() method
         							let text_idx = ident_names.add(text.clone());
-        							print!("\tAdded ident {:?} as {:?}", &ident_names[&text_idx], &text_idx);
         							Value::Identifier(text_idx, token.location())
         						},
         						TokenText::Integer(val) => Value::Integer(*val, token.location()),
         						_ => panic!("There shouldn't be any parenthesis tokens left in the parse tree, but one was encountered!"),
     						}
                         }
-                        Expr::SExpr(sexpr_idx) => {
-                            print!("\tExpr::SExpr({:?})", sexpr_idx);
-                            print!("\tRemoving SEXPR at {:?}", sexpr_idx);
-                            match cons_idx_by_sexpr_idx.remove(&sexpr_idx) {
-                                Some(val) => Value::SExpr(val),
-                                None => {
-                                    panic!("{}\n\tError at {:?}\n\tcons_idx_by_sexpr_idx: {:?}",
+                        Expr::SExpr(sexpr_idx) => match cons_idx_by_sexpr_idx.remove(&sexpr_idx) {
+                            Some(val) => Value::SExpr(val),
+                            None => panic!("{}\n\tError at {:?}\n\tcons_idx_by_sexpr_idx: {:?}",
     								"We should have already traversed every SExpr in the CAR field of a Parse Tree Expr node.",
-    								parse_tree.locate(sexpr_idx), cons_idx_by_sexpr_idx)
-                                }
-                            }
-                        }
+    								parse_tree.locate(sexpr_idx), cons_idx_by_sexpr_idx),
+                        },
                     };
-                    print!("\tAdded Expr({:?}) => Car({:?})", expr_idx, value);
                     cars_by_expr_idx.insert(expr_idx, value);
                 }
             }
